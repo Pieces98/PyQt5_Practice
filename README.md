@@ -1,1 +1,3 @@
-"# PyQt5_Practice" 
+# PyQt5_Practice
+- UI design : PyQt designer
+- Logic design : Python
