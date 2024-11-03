@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5 import uic
+from datetime import datetime
 
 from_class = uic.loadUiType('./interface/test10.ui')[0]
 
@@ -16,14 +17,22 @@ class WindowClass(QMainWindow, from_class):
         self.pixmap = QPixmap()
         self.btnOpen.clicked.connect(self.openFile)
 
-        self.btnCamera.clicked.connect(self.connectCamera)
+        self.btnCamera.clicked.connect(self.clickCamera)
 
         self.camera = Camera(self)
         self.isCameraOn = False
         self.camera.daemon = True
-        self.count = 0
-
+        self.count = 0  
+    
         self.camera.update.connect(self.updateCamera)
+
+        self.btnRec.hide()
+        self.btnRec.clicked.connect(self.clickRec)
+        self.isRecStart = False
+        self.record = Camera(self)
+        self.record.daemon = True
+
+        self.record.update.connect(self.updateRecording)
 
     def openFile(self):
         file = QFileDialog.getOpenFileName(filter='Image (*.*)')
@@ -39,20 +48,23 @@ class WindowClass(QMainWindow, from_class):
 
             self.label.setPixmap(self.pixmap)
 
-    def connectCamera(self):
+    def clickCamera(self):
         if self.isCameraOn:
             self.btnCamera.setText('Camera On')
             self.cameraStop()
+            self.recordStop()
+            self.btnRec.hide()
         else:
             self.btnCamera.setText('Camera Off')
             self.cameraStart()
+            self.btnRec.show()
         
         self.isCameraOn = not self.isCameraOn
     
     def updateCamera(self):
-        ret, image = self.video.read()
+        ret, self.image = self.video.read()
         if ret:
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
 
             h, w, c = image.shape
             qImage = QImage(image.data, w, h, w*c, QImage.Format_RGB888)
@@ -61,8 +73,7 @@ class WindowClass(QMainWindow, from_class):
             self.pixmap = self.pixmap.scaled(self.label.width(), self.label.height())
 
             self.label.setPixmap(self.pixmap)
-        self.count += 1
-        
+
     def cameraStart(self):
         self.camera.running = True
         self.camera.start()
@@ -71,9 +82,39 @@ class WindowClass(QMainWindow, from_class):
 
     def cameraStop(self):
         self.camera.running = False
-        self.count = 0
-
         self.video.release()
+
+    def clickRec(self):
+        if self.isRecStart:
+            self.btnRec.setText('Rec Start')
+            self.recordStop()
+        else:
+            self.btnRec.setText('Rec Stop')
+            self.recordStart()
+        
+        self.isRecStart = not self.isRecStart
+    
+    def updateRecording(self):
+        self.writer.write(self.image)
+
+    def recordStart(self):
+        self.record.running = True
+        self.record.start()
+
+        fname = datetime.now().strftime('%Y%m%d_%H%M%S')+'.avi'
+        self.fourcc = cv2.VideoWriter_fourcc(*'XVID')
+
+        w = int(self.video.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(self.video.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        self.writer = cv2.VideoWriter(fname, self.fourcc, 10.0, (w, h))
+        self.count = 0
+        
+    def recordStop(self):
+        self.record.running = False
+
+        if self.isRecStart:
+            self.writer.release()
 
 class Camera(QThread):
     update = pyqtSignal()
